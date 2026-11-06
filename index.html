@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Shadow Sneak: Silent Strike</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { background:#0b0e1a; font-family:'Segoe UI',system-ui,sans-serif; color:#e8ecff; min-height:100%; }
+  body { display:flex; justify-content:center; }
+  #wrap { position:relative; width:100%; max-width:480px; height:100vh; max-height:860px; overflow:hidden; background:#10142a; }
+  canvas { display:block; width:100%; height:100%; touch-action:none; }
+  .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(8,10,24,.88); z-index:10; padding:24px; text-align:center; }
+  .hidden { display:none !important; }
+  h1 { font-size:34px; letter-spacing:2px; color:#7ef0c1; text-shadow:0 0 18px rgba(126,240,193,.5); }
+  h1 span { color:#ffd166; }
+  h2 { font-size:26px; color:#7ef0c1; }
+  .sub { color:#9aa3c7; font-size:15px; line-height:1.5; }
+  .btn { background:#1d2b53; color:#fff; border:2px solid #7ef0c1; border-radius:12px; padding:13px 26px; font-size:17px; font-weight:700; cursor:pointer; min-width:220px; }
+  .btn:active { transform:scale(.97); background:#2a3d75; }
+  .btn.gold { border-color:#ffd166; color:#ffd166; }
+  .btn.small { min-width:0; padding:9px 14px; font-size:14px; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  #hud { position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:8px 10px; z-index:5; pointer-events:none; }
+  #hud .pill { background:rgba(10,14,32,.8); border:1px solid #334; border-radius:999px; padding:5px 11px; font-size:13px; font-weight:700; }
+  #hud .pill b { color:#ffd166; }
+  .iconbtn { pointer-events:auto; background:rgba(10,14,32,.85); color:#fff; border:1px solid #556; border-radius:10px; width:40px; height:40px; font-size:19px; cursor:pointer; }
+  #actions { position:absolute; bottom:14px; left:0; right:0; display:flex; justify-content:center; gap:10px; z-index:5; }
+  .act { width:76px; height:56px; border-radius:14px; border:2px solid #7ef0c1; background:rgba(20,28,60,.9); color:#fff; font-size:13px; font-weight:800; cursor:pointer; }
+  .act:disabled { opacity:.35; }
+  .act.warn { border-color:#ff5d73; color:#ffb3bc; }
+  .act.gold { border-color:#ffd166; color:#ffe9a8; }
+  #toast { position:absolute; top:56px; left:50%; transform:translateX(-50%); background:rgba(10,14,32,.92); border:1px solid #ffd166; color:#ffe9a8; padding:8px 16px; border-radius:999px; font-size:14px; font-weight:700; z-index:6; white-space:nowrap; }
+  .howto { text-align:left; font-size:14.5px; line-height:1.65; color:#cdd4f5; max-width:400px; }
+  .howto b { color:#7ef0c1; }
+  #levels-grid { display:grid; grid-template-columns:repeat(5,52px); gap:8px; }
+  #levels-grid .lv { width:52px; height:52px; border-radius:12px; border:2px solid #334; background:#1a2145; color:#fff; font-size:17px; font-weight:800; cursor:pointer; }
+  #levels-grid .lv.done { border-color:#7ef0c1; color:#7ef0c1; }
+  #levels-grid .lv.locked { opacity:.35; cursor:not-allowed; }
+  .chars { display:flex; gap:10px; }
+  .char { border:2px solid #334; background:#1a2145; border-radius:12px; padding:8px 10px; cursor:pointer; font-size:13px; font-weight:700; text-align:center; min-width:86px; }
+  .char.sel { border-color:#ffd166; }
+  .char.locked { opacity:.4; cursor:not-allowed; }
+  .char .dot { width:22px; height:22px; border-radius:50%; margin:0 auto 5px; }
+  #unlock-note { color:#ffd166; font-weight:700; font-size:15px; min-height:20px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="480" height="800"></canvas>
+
+  <div id="hud" class="hidden">
+    <span class="pill">Level <b id="hud-level">1</b>/20</span>
+    <span class="pill">Score <b id="hud-score">0</b></span>
+    <span class="pill">❤ <b id="hud-lives">3</b></span>
+    <button class="iconbtn" id="btn-pause" title="Pause">❚❚</button>
+    <button class="iconbtn" id="btn-mute" title="Mute">🔊</button>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <div id="actions" class="hidden">
+    <button class="act warn" id="btn-strike" disabled>⚔ STRIKE</button>
+    <button class="act" id="btn-smoke" disabled>💨 SMOKE</button>
+    <button class="act gold" id="btn-dash" disabled>➤ DASH</button>
+  </div>
+
+  <!-- MENU -->
+  <div id="menu" class="overlay">
+    <h1>SHADOW SNEAK<br><span>SILENT STRIKE</span></h1>
+    <p class="sub">Top-down stealth. Slip between cover, wait for the patrols' vision cones to turn, and strike from behind. Every contract ends with a Boss — take them down, then slip out the exit.</p>
+    <div class="chars" id="chars"></div>
+    <button class="btn gold" id="btn-start">▶ START CONTRACT</button>
+    <button class="btn" id="btn-howto">HOW TO PLAY</button>
+    <button class="btn" id="btn-levels">LEVELS</button>
+    <p class="sub" id="menu-progress"></p>
+  </div>
+
+  <!-- HOW TO -->
+  <div id="howto" class="overlay hidden">
+    <h2>HOW TO PLAY</h2>
+    <div class="howto">
+      <p>🖱️ <b>Move:</b> tap / click anywhere to sneak there. WASD or arrow keys also work.</p>
+      <p>👁️ <b>Vision cones:</b> yellow wedges are what guards can see. If you are caught inside one with a clear line of sight, the alarm meter fills — get out fast or hide in a bush.</p>
+      <p>🌿 <b>Cover:</b> crates block sight and movement. Bushes hide you completely while you stand in them.</p>
+      <p>⚔️ <b>Strike from behind:</b> creep up behind a guard (or the Boss) until STRIKE lights up, then tap it, press Space, or tap the guard. A frontal strike sets off the alarm!</p>
+      <p>💨 <b>Smoke bomb</b> (unlocked Level 3): blinds nearby guards for 5 seconds. <b>Dash</b> (Level 6): a burst of speed.</p>
+      <p>🎯 <b>Contract:</b> take down the Boss, then reach the glowing green exit. Get spotted 3 times in a level and the contract fails.</p>
+    </div>
+    <button class="btn" id="btn-howto-back">BACK</button>
+  </div>
+
+  <!-- LEVELS -->
+  <div id="levels" class="overlay hidden">
+    <h2>SELECT CONTRACT</h2>
+    <div id="levels-grid"></div>
+    <button class="btn" id="btn-levels-back">BACK</button>
+  </div>
+
+  <!-- PAUSED -->
+  <div id="paused" class="overlay hidden">
+    <h2>PAUSED</h2>
+    <p class="sub">The patrols wait for no one… except now.</p>
+    <button class="btn gold" id="btn-resume">▶ RESUME</button>
+    <button class="btn" id="btn-restart">↻ RESTART LEVEL</button>
+    <button class="btn" id="btn-quit">MENU</button>
+  </div>
+
+  <!-- LEVEL CLEAR -->
+  <div id="clear" class="overlay hidden">
+    <h2>CONTRACT COMPLETE</h2>
+    <p class="sub" id="clear-stats"></p>
+    <p id="unlock-note"></p>
+    <button class="btn gold" id="btn-next">NEXT CONTRACT ▶</button>
+    <button class="btn" id="btn-clear-menu">MENU</button>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="gameover" class="overlay hidden">
+    <h2>SPOTTED!</h2>
+    <p class="sub">The guards raised the alarm three times.<br>The contract is blown — but shadows always return.</p>
+    <button class="btn gold" id="btn-retry">↻ RETRY LEVEL</button>
+    <button class="btn" id="btn-over-menu">MENU</button>
+  </div>
+
+  <!-- WIN -->
+  <div id="win" class="overlay hidden">
+    <h2>🏆 MASTER OF SHADOWS</h2>
+    <p class="sub" id="win-stats"></p>
+    <p class="sub">All 20 contracts complete. Every Boss silenced, every exit reached unseen. The city never knew you were there.</p>
+    <button class="btn gold" id="btn-win-replay">↻ PLAY AGAIN</button>
+    <button class="btn" id="btn-win-menu">MENU</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* Shadow Sneak: Silent Strike — original game. No copied art, code, names or assets.
+   Plain HTML5 Canvas + vanilla JS + WebAudio. All art is drawn procedurally. */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 480, H = 800;
+const FIELD = { x: 14, y: 96, w: 452, h: 648 }; // play area below HUD, above action bar
+
+// ---------- utils ----------
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function clamp(v,a,b){ return v<a?a:v>b?b:v; }
+function dist(ax,ay,bx,by){ return Math.hypot(ax-bx,ay-by); }
+function angDiff(a,b){ let d=a-b; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI; return d; }
+function segIntersectsRect(x1,y1,x2,y2,r){
+  // segment vs rect: sample + slab test
+  const dx=x2-x1, dy=y2-y1; let t0=0, t1=1;
+  const p=[-dx,dx,-dy,dy], q=[x1-r.x, r.x+r.w-x1, y1-r.y, r.y+r.h-y1];
+  for(let i=0;i<4;i++){ if(Math.abs(p[i])<1e-9){ if(q[i]<0) return false; } else { const t=q[i]/p[i]; if(p[i]<0){ if(t>t1) return false; if(t>t0) t0=t; } else { if(t<t0) return false; if(t<t1) t1=t; } } }
+  return true;
+}
+function losBlocked(ax,ay,bx,by,walls){ for(const w of walls){ if(w.solid && segIntersectsRect(ax,ay,bx,by,w)) return true; } return false; }
+function circleHitsWalls(x,y,r,walls){
+  for(const w of walls){ if(!w.solid) continue;
+    const cx=clamp(x,w.x,w.x+w.w), cy=clamp(y,w.y,w.y+w.h);
+    if(dist(x,y,cx,cy)<r) return w;
+  } return null;
+}
+
+// ---------- audio (original synthesized music + SFX) ----------
+let AC=null, masterGain=null, musicGain=null, muted=false, musicTimer=null, musicStep=0;
+function ensureAudio(){
+  if(!AC){ AC=new (window.AudioContext||window.webkitAudioContext)(); masterGain=AC.createGain(); masterGain.gain.value=0.9; masterGain.connect(AC.destination); musicGain=AC.createGain(); musicGain.gain.value=0.16; musicGain.connect(masterGain); }
+  if(AC.state==='suspended') AC.resume();
+}
+function tone(freq,dur,type,vol,when,slideTo){
+  if(!AC||muted) return;
+  const t=AC.currentTime+(when||0), o=AC.createOscillator(), g=AC.createGain();
+  o.type=type||'sine'; o.frequency.setValueAtTime(freq,t);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo,t+dur);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol||0.2,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(masterGain); o.start(t); o.stop(t+dur+0.05);
+}
+function sfx(name){
+  if(!AC) return;
+  if(name==='strike'){ tone(180,0.18,'triangle',0.35,0,60); tone(90,0.25,'sine',0.3,0,40); }
+  else if(name==='alert'){ tone(660,0.12,'square',0.16); tone(520,0.16,'square',0.16,0.13); }
+  else if(name==='caught'){ tone(440,0.3,'sawtooth',0.2,0,220); tone(330,0.4,'sawtooth',0.2,0.15,165); }
+  else if(name==='clear'){ [523,659,784,1047].forEach((f,i)=>tone(f,0.22,'triangle',0.22,i*0.11)); }
+  else if(name==='click'){ tone(800,0.06,'square',0.1); }
+  else if(name==='smoke'){ tone(300,0.4,'sine',0.18,0,120); }
+  else if(name==='dash'){ tone(500,0.15,'sine',0.18,0,900); }
+  else if(name==='boss'){ tone(220,0.4,'triangle',0.25,0,110); }
+  else if(name==='win'){ [523,659,784,1047,1319].forEach((f,i)=>tone(f,0.3,'triangle',0.22,i*0.13)); }
+}
+// Original stealth groove: A-minor bass pulse + sparse plucked arpeggio. No copyrighted material.
+const BASS=[55,0,55,0,65.4,0,55,0,49,0,55,0,82.4,0,73.4,0];
+const ARP=[220,261.6,329.6,440,329.6,261.6,220,164.8,196,261.6,329.6,392,329.6,261.6,196,164.8];
+function startMusic(){
+  ensureAudio(); if(musicTimer) return;
+  musicStep=0;
+  musicTimer=setInterval(()=>{
+    if(muted||!AC) return;
+    const i=musicStep%16;
+    if(BASS[i]){ const o=AC.createOscillator(),g=AC.createGain(); o.type='triangle'; o.frequency.value=BASS[i];
+      g.gain.setValueAtTime(0.5,AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+0.42);
+      o.connect(g); g.connect(musicGain); o.start(); o.stop(AC.currentTime+0.45); }
+    if(musicStep%2===0){ const f=ARP[(musicStep/2)%16|0]; const o=AC.createOscillator(),g=AC.createGain();
+      o.type='sine'; o.frequency.value=f; g.gain.setValueAtTime(0.22,AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+0.3);
+      o.connect(g); g.connect(musicGain); o.start(); o.stop(AC.currentTime+0.32); }
+    musicStep++;
+  },190);
+}
+function setMuted(m){ muted=m; document.getElementById('btn-mute').textContent=m?'🔇':'🔊'; if(masterGain) masterGain.gain.value=m?0:0.9; }
+
+// ---------- characters & tools ----------
+const CHARS=[
+  { id:'shadow', name:'Shadow', color:'#2fd4a7', desc:'Balanced', unlock:1, speed:1.0, quiet:1.0 },
+  { id:'fox',    name:'Night Fox', color:'#ff9f43', desc:'+12% speed', unlock:5, speed:1.12, quiet:1.0 },
+  { id:'owl',    name:'Silent Owl', color:'#b388ff', desc:'+1 smoke', unlock:10, speed:1.0, quiet:0.8 },
+  { id:'ghost',  name:'Ghost', color:'#e8f4ff', desc:'Fast + quiet', unlock:15, speed:1.15, quiet:0.7 },
+];
+const TOOL_UNLOCKS={ 3:'💨 Smoke Bomb unlocked!', 6:'➤ Dash unlocked!', 10:'🦉 Silent Owl unlocked!', 15:'👻 Ghost unlocked!', 5:'🦊 Night Fox unlocked!' };
+
+// ---------- game state ----------
+let screen='menu'; // menu|howto|levels|playing|paused|clear|gameover|win
+let level=1, score=0, totalScore=0, lives=3, maxUnlocked=1, charIdx=0;
+let player=null, guards=[], boss=null, walls=[], exitZone=null, spawn={x:60,y:690};
+let detection=0, smokeLeft=0, smokeTimer=0, smokeClouds=[], dashCd=0, dashTimer=0, combo=0;
+let keys={}, lastTs=0, alarmFlash=0, levelStartTime=0, strikesThisLevel=0;
+try{ const s=JSON.parse(localStorage.getItem('shadowSneakSave')||'{}'); if(s.maxUnlocked) maxUnlocked=s.maxUnlocked; if(s.totalScore) totalScore=s.totalScore; }catch(e){}
+function save(){ try{ localStorage.setItem('shadowSneakSave', JSON.stringify({maxUnlocked,totalScore})); }catch(e){} }
+
+const LEVEL_NAMES=['First Contract','Night Watch','Warehouse Blues','Garden Patrol','The Fox Den','Rooftop Run','Silent Halls','Market Shadows','The Owlery','Iron Gate','Midnight Docks','The Vault Road','Crimson Court','Fog Alley','The Long Hall','High Tower','The Ghost Wing','Last Lantern','The Inner Ring','The Silent King'];
+
+// Static floor cached once per level to an offscreen canvas (cheap per-frame draws).
+let bgCanvas=null;
+function buildBackground(){
+  bgCanvas=document.createElement('canvas'); bgCanvas.width=W; bgCanvas.height=H;
+  const b=bgCanvas.getContext('2d');
+  const g=b.createLinearGradient(0,0,0,H); g.addColorStop(0,'#141a38'); g.addColorStop(1,'#0d1126');
+  b.fillStyle=g; b.fillRect(0,0,W,H);
+  b.strokeStyle='rgba(255,255,255,0.05)'; b.lineWidth=1;
+  for(let x=FIELD.x;x<=FIELD.x+FIELD.w;x+=40){ b.beginPath(); b.moveTo(x,FIELD.y); b.lineTo(x,FIELD.y+FIELD.h); b.stroke(); }
+  for(let y=FIELD.y;y<=FIELD.y+FIELD.h;y+=40){ b.beginPath(); b.moveTo(FIELD.x,y); b.lineTo(FIELD.x+FIELD.w,y); b.stroke(); }
+  b.strokeStyle='#2c355e'; b.lineWidth=3; b.strokeRect(FIELD.x,FIELD.y,FIELD.w,FIELD.h);
+}
+
+// ---------- level generation ----------
+function genLevel(n){
+  const rnd=mulberry32(1000+n*77);
+  walls=[]; guards=[]; smokeClouds=[]; detection=0; dashCd=0; dashTimer=0; smokeTimer=0; combo=0; strikesThisLevel=0;
+  const speed=150*CHARS[charIdx].speed;
+  player={ x:60, y:690, r:12, tx:60, ty:690, moving:false, speed, dir:-Math.PI/2, hidden:false };
+  spawn={x:60,y:690};
+  exitZone={ x:430, y:120, r:26, open:false };
+  // cover: crates (solid, block sight) + bushes (hide spots)
+  const nCrates=4+Math.min(3,Math.floor(n/4)), nBush=3+Math.min(3,Math.floor(n/5));
+  function farFrom(x,y,pts,min){ return pts.every(p=>dist(x,y,p.x,p.y)>min); }
+  const anchors=[{x:60,y:690},{x:430,y:120}];
+  for(let i=0;i<nCrates;i++){
+    let x,y,tries=0;
+    do{ x=FIELD.x+30+rnd()*(FIELD.w-110); y=FIELD.y+40+rnd()*(FIELD.h-130); tries++; }while(tries<40 && !farFrom(x+25,y+25,anchors,110));
+    walls.push({x,y,w:52+rnd()*28,h:44+rnd()*24,solid:true,kind:'crate'});
+  }
+  for(let i=0;i<nBush;i++){
+    let x,y,tries=0;
+    do{ x=FIELD.x+30+rnd()*(FIELD.w-100); y=FIELD.y+40+rnd()*(FIELD.h-120); tries++; }while(tries<40 && !farFrom(x+25,y+25,anchors,90));
+    walls.push({x,y,w:56,h:48,solid:false,kind:'bush'});
+  }
+  // guards: patrol waypoints
+  const nGuards=Math.min(2+Math.floor((n-1)/2),8);
+  const gSpeed=42+n*3.2, gRange=Math.min(128+n*3.5,195), gCone=1.15;
+  for(let i=0;i<nGuards;i++){
+    let gx,gy,tries=0;
+    do{ gx=FIELD.x+70+rnd()*(FIELD.w-140); gy=FIELD.y+70+rnd()*(FIELD.h-160); tries++; }while(tries<25 && pointInSolidWall(gx,gy,16));
+    const wps=[]; const nw=2+(rnd()<0.5?1:0);
+    for(let k=0;k<nw;k++){ let wx,wy,tries=0;
+      do{ wx=clamp(gx+(rnd()-0.5)*220,FIELD.x+24,FIELD.x+FIELD.w-24); wy=clamp(gy+(rnd()-0.5)*200,FIELD.y+24,FIELD.y+FIELD.h-24); tries++; }while(tries<25 && pointInSolidWall(wx,wy,16));
+      wps.push({x:wx,y:wy}); }
+    guards.push({ id:'g'+i, x:gx, y:gy, r:13, wps, wp:0, speed:gSpeed*(0.9+rnd()*0.25), dir:rnd()*Math.PI*2, range:gRange, cone:gCone, alive:true, pauseT:0, suspicious:0 });
+  }
+  // Boss: bigger, wider cone, patrols near the exit
+  const bossWps=[{x:330,y:160},{x:430,y:220},{x:380,y:280},{x:300,y:230}].map(p=>{
+    let x=p.x,y=p.y,tries=0;
+    while(tries++<25 && pointInSolidWall(x,y,20)){ x=clamp(x+30,FIELD.x+24,FIELD.x+FIELD.w-24); y=clamp(y+20,FIELD.y+24,FIELD.y+FIELD.h-24); }
+    return {x,y};
+  });
+  boss={ id:'boss', x:bossWps[0].x, y:bossWps[0].y, r:17, wps:bossWps, wp:0,
+    speed:34+n*2, dir:Math.PI, range:Math.min(gRange+34,215), cone:1.5, alive:true, pauseT:0, suspicious:0 };
+  smokeLeft=(n>=3?2:0)+(CHARS[charIdx].id==='owl'?1:0);
+  levelStartTime=performance.now();
+  buildBackground();
+}
+
+// ---------- pathfinding (coarse grid BFS so click-to-move routes around crates) ----------
+const CELL=24;
+function gridDims(){ return { cols: Math.floor(FIELD.w/CELL), rows: Math.floor(FIELD.h/CELL) }; }
+function cellBlocked(c,r){
+  const cx=FIELD.x+c*CELL+CELL/2, cy=FIELD.y+r*CELL+CELL/2;
+  return walls.some(w=>w.solid && cx>w.x-player.r && cx<w.x+w.w+player.r && cy>w.y-player.r && cy<w.y+w.h+player.r);
+}
+function findPath(sx,sy,tx,ty){
+  const {cols,rows}=gridDims();
+  const sc=Math.floor((sx-FIELD.x)/CELL), sr=Math.floor((sy-FIELD.y)/CELL);
+  let tc=clamp(Math.floor((tx-FIELD.x)/CELL),0,cols-1), tr=clamp(Math.floor((ty-FIELD.y)/CELL),0,rows-1);
+  // If the clicked cell is inside a crate, retarget to the nearest free cell
+  // so the player walks up to the crate instead of pressing against it forever.
+  if(cellBlocked(tc,tr)){
+    let found=null;
+    for(let ring=1;ring<=5 && !found;ring++) for(let dc=-ring;dc<=ring && !found;dc++) for(let dr=-ring;dr<=ring && !found;dr++){
+      if(Math.max(Math.abs(dc),Math.abs(dr))!==ring) continue;
+      const nc=tc+dc, nr=tr+dr;
+      if(nc<0||nr<0||nc>=cols||nr>=rows||cellBlocked(nc,nr)) continue;
+      found=[nc,nr];
+    }
+    if(found){ tc=found[0]; tr=found[1]; tx=FIELD.x+tc*CELL+CELL/2; ty=FIELD.y+tr*CELL+CELL/2; }
+  }
+  const key=(c,r)=>r*cols+c;
+  const prev=new Map(), seen=new Set([key(sc,sr)]), q=[[sc,sr]];
+  while(q.length){
+    const [c,r]=q.shift();
+    if(c===tc&&r===tr){
+      const pts=[]; let k=key(c,r);
+      let cc=c, rr=r;
+      while(!(cc===sc&&rr===sr)){ pts.unshift({x:FIELD.x+cc*CELL+CELL/2, y:FIELD.y+rr*CELL+CELL/2}); const p=prev.get(key(cc,rr)); cc=p[0]; rr=p[1]; }
+      pts.push({x:tx,y:ty});
+      return pts;
+    }
+    for(const [dc,dr] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nc=c+dc, nr=r+dr;
+      if(nc<0||nr<0||nc>=cols||nr>=rows||seen.has(key(nc,nr))||cellBlocked(nc,nr)) continue;
+      seen.add(key(nc,nr)); prev.set(key(nc,nr),[c,r]); q.push([nc,nr]);
+    }
+  }
+  return [{x:tx,y:ty}]; // no route (shouldn't happen): fall back to direct
+}
+function setMoveTarget(x,y){
+  player.tx=clamp(x,FIELD.x+8,FIELD.x+FIELD.w-8); player.ty=clamp(y,FIELD.y+8,FIELD.y+FIELD.h-8);
+  player.path=findPath(player.x,player.y,player.tx,player.ty);
+  player.moving=true;
+}
+function pointInSolidWall(x,y,pad){
+  return walls.some(w=>w.solid && x>w.x-pad && x<w.x+w.w+pad && y>w.y-pad && y<w.y+w.h+pad);
+}
+const $=id=>document.getElementById(id);
+function show(id){ ['menu','howto','levels','paused','clear','gameover','win'].forEach(s=>$(s).classList.toggle('hidden', s!==id)); }
+function setScreen(s){
+  screen=s;
+  if(s==='playing'){ show(null); $('hud').classList.remove('hidden'); $('actions').classList.remove('hidden'); }
+  else { $('hud').classList.add('hidden'); $('actions').classList.add('hidden'); if(s!=='paused') show(s==='menu'?'menu':s); if(s==='paused') show('paused'); }
+  updateHUD(); updateActionButtons(); refreshMenu();
+}
+function toast(msg,ms){ const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.add('hidden'), ms||2600); }
+function updateHUD(){ $('hud-level').textContent=level; $('hud-score').textContent=score; $('hud-lives').textContent='♥'.repeat(Math.max(0,lives)); }
+function updateActionButtons(){
+  const st=strikeTarget();
+  $('btn-strike').disabled=!st;
+  $('btn-smoke').disabled=!(level>=3 && smokeLeft>0 && screen==='playing');
+  $('btn-dash').disabled=!(level>=6 && dashCd<=0 && screen==='playing');
+  $('btn-smoke').textContent='💨 SMOKE ×'+smokeLeft;
+}
+function refreshMenu(){
+  $('menu-progress').textContent='Best progress: Contract '+maxUnlocked+' of 20  •  Total score '+totalScore;
+  const c=$('chars'); c.innerHTML='';
+  CHARS.forEach((ch,i)=>{
+    const locked=maxUnlocked<ch.unlock;
+    const d=document.createElement('div'); d.className='char'+(i===charIdx?' sel':'')+(locked?' locked':'');
+    d.innerHTML='<div class="dot" style="background:'+ch.color+'"></div>'+ch.name+'<br><span style="color:#9aa3c7;font-weight:400">'+(locked?'Lvl '+ch.unlock:ch.desc)+'</span>';
+    d.onclick=()=>{ if(locked){ toast(ch.name+' unlocks at Contract '+ch.unlock); return; } charIdx=i; sfx('click'); refreshMenu(); };
+    c.appendChild(d);
+  });
+  const g=$('levels-grid'); g.innerHTML='';
+  for(let i=1;i<=20;i++){
+    const b=document.createElement('button'); b.className='lv'+(i<maxUnlocked?' done':'')+(i>maxUnlocked?' locked':''); b.textContent=i;
+    b.onclick=()=>{ if(i>maxUnlocked) return; startLevel(i); };
+    g.appendChild(b);
+  }
+}
+
+// ---------- flow ----------
+function startLevel(n){
+  level=n; lives=3; score=0; genLevel(n); ensureAudio(); startMusic(); setScreen('playing');
+  toast('Contract '+n+': '+LEVEL_NAMES[n-1]);
+  if(n===3) toast('💨 Smoke Bomb unlocked — press SMOKE to blind guards');
+  if(n===6) toast('➤ Dash unlocked — press DASH for a burst of speed');
+}
+function levelClear(){
+  const timeBonus=Math.max(0, 300-Math.floor((performance.now()-levelStartTime)/1000)*5);
+  const bonus=200+lives*50+timeBonus+smokeLeft*25;
+  score+=bonus; totalScore+=score; save();
+  sfx('clear');
+  maxUnlocked=Math.max(maxUnlocked, Math.min(20, level+1)); save();
+  $('clear-stats').textContent='Contract '+level+' complete!  Bonus +'+bonus+'  •  Score '+score+'  •  Strikes '+strikesThisLevel;
+  $('unlock-note').textContent=TOOL_UNLOCKS[level+1]||'';
+  if(level>=20){ $('win-stats').textContent='Final score '+score+'  •  Total career score '+totalScore; setScreen('win'); sfx('win'); return; }
+  setScreen('clear');
+}
+function gameOver(){ sfx('caught'); setScreen('gameover'); }
+function caught(){
+  lives--; alarmFlash=1; sfx('caught'); updateHUD();
+  if(lives<=0){ gameOver(); return; }
+  toast('SPOTTED!  '+(lives)+' chance'+(lives===1?'':'s')+' left');
+  detection=0;
+  player.x=spawn.x; player.y=spawn.y; player.tx=spawn.x; player.ty=spawn.y; player.path=null; player.moving=false;
+  guards.forEach(g=>{ g.x=g.wps[0].x; g.y=g.wps[0].y; g.wp=0; g.suspicious=0; });
+  boss.x=boss.wps[0].x; boss.y=boss.wps[0].y; boss.wp=0;
+}
+
+// ---------- stealth core ----------
+function isBehind(target){
+  // player is behind target if the vector target->player points opposite target facing
+  const a=Math.atan2(player.y-target.y, player.x-target.x);
+  return Math.abs(angDiff(a, target.dir))>2.1; // >120°
+}
+function strikeTarget(){
+  if(screen!=='playing'||!player) return null;
+  const all=[...guards.filter(g=>g.alive), boss.alive?boss:null].filter(Boolean);
+  for(const t of all){ if(dist(player.x,player.y,t.x,t.y)<40 && isBehind(t)) return t; }
+  return null;
+}
+function doStrike(){
+  const t=strikeTarget();
+  if(!t){
+    // frontal / side attempt within reach sets off the alarm
+    const all=[...guards.filter(g=>g.alive), boss.alive?boss:null].filter(Boolean);
+    const near=all.find(x=>dist(player.x,player.y,x.x,x.y)<44);
+    if(near){ detection=1; sfx('alert'); toast('Frontal strike — the guard saw you coming!'); }
+    return;
+  }
+  t.alive=false; strikesThisLevel++; combo++;
+  score+= t.id==='boss'?300:100; sfx(t.id==='boss'?'boss':'strike');
+  if(t.id==='boss'){ exitZone.open=true; toast('👑 BOSS DOWN — reach the green exit!'); }
+  else toast('Silent takedown! +100');
+  updateHUD(); updateActionButtons();
+}
+function useSmoke(){
+  if(level<3||smokeLeft<=0||screen!=='playing') return;
+  smokeLeft--; smokeTimer=5; smokeClouds.push({x:player.x,y:player.y,r:85,t:5}); sfx('smoke'); updateActionButtons();
+}
+function useDash(){
+  if(level<6||dashCd>0||screen!=='playing') return;
+  dashTimer=0.35; dashCd=3; sfx('dash'); updateActionButtons();
+}
+function inBush(x,y){ return walls.some(w=>w.kind==='bush' && x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h); }
+function inSmoke(x,y){ return smokeClouds.some(c=>dist(x,y,c.x,c.y)<c.r); }
+
+// ---------- update ----------
+function moveGuard(g,dt){
+  if(!g.alive) return;
+  if(g.pauseT>0){ g.pauseT-=dt; return; }
+  const wp=g.wps[g.wp], d=dist(g.x,g.y,wp.x,wp.y);
+  if(d<8){ g.wp=(g.wp+1)%g.wps.length; g.pauseT=0.9+Math.random()*0.8; return; }
+  const a=Math.atan2(wp.y-g.y,wp.x-g.x); g.dir=a;
+  const nx=g.x+Math.cos(a)*g.speed*dt, ny=g.y+Math.sin(a)*g.speed*dt;
+  if(circleHitsWalls(nx,ny,g.r,walls)){ g.wp=(g.wp+1)%g.wps.length; return; } // don't walk through crates
+  g.x=nx; g.y=ny;
+}
+function update(dt){
+  if(screen!=='playing') return;
+  // player keyboard movement
+  let kx=0,ky=0;
+  if(keys['arrowup']||keys['w'])ky-=1; if(keys['arrowdown']||keys['s'])ky+=1;
+  if(keys['arrowleft']||keys['a'])kx-=1; if(keys['arrowright']||keys['d'])kx+=1;
+  if(kx||ky){ const m=Math.hypot(kx,ky); player.tx=player.x+kx/m*40; player.ty=player.y+ky/m*40; player.path=null; player.moving=true; }
+  if(player.moving){
+    // follow the computed path around crates; fall back to the direct target
+    let tx=player.tx, ty=player.ty;
+    if(player.path && player.path.length){ tx=player.path[0].x; ty=player.path[0].y;
+      if(dist(player.x,player.y,tx,ty)<7) player.path.shift();
+    }
+    const d=dist(player.x,player.y,tx,ty);
+    if(d<4 && (!player.path || !player.path.length)){ player.moving=false; }
+    else{
+      const sp=player.speed*(dashTimer>0?2.5:1);
+      const a=Math.atan2(ty-player.y,tx-player.x); player.dir=a;
+      const step=Math.min(sp*dt,d);
+      const nx=player.x+Math.cos(a)*step, ny=player.y+Math.sin(a)*step;
+      // axis-separated collision so the player slides along crates
+      if(!circleHitsWalls(nx,player.y,player.r,walls)) player.x=clamp(nx,FIELD.x+player.r,FIELD.x+FIELD.w-player.r);
+      if(!circleHitsWalls(player.x,ny,player.r,walls)) player.y=clamp(ny,FIELD.y+player.r,FIELD.y+FIELD.h-player.r);
+    }
+  }
+  player.hidden=inBush(player.x,player.y);
+  if(dashTimer>0)dashTimer-=dt; if(dashCd>0)dashCd-=dt; if(smokeTimer>0)smokeTimer-=dt;
+  smokeClouds.forEach(c=>c.t-=dt); smokeClouds=smokeClouds.filter(c=>c.t>0);
+  guards.forEach(g=>moveGuard(g,dt)); moveGuard(boss,dt);
+  // detection
+  const quiet=CHARS[charIdx].quiet;
+  let seen=false;
+  if(!player.hidden && !inSmoke(player.x,player.y)){
+    const all=[...guards.filter(g=>g.alive), boss.alive?boss:null].filter(Boolean);
+    for(const t of all){
+      const d=dist(player.x,player.y,t.x,t.y);
+      if(d<t.range && Math.abs(angDiff(Math.atan2(player.y-t.y,player.x-t.x), t.dir))<t.cone/2 && !losBlocked(t.x,t.y,player.x,player.y,walls)){
+        seen=true; detection+=dt*(1.25*(1.3-d/t.range))*quiet; t.suspicious=1; break;
+      }
+    }
+  }
+  if(!seen) detection=Math.max(0,detection-dt*0.55);
+  if(alarmFlash>0)alarmFlash=Math.max(0,alarmFlash-dt*1.5);
+  if(detection>=1){ caught(); return; }
+  // exit
+  if(boss && !boss.alive && exitZone.open && dist(player.x,player.y,exitZone.x,exitZone.y)<exitZone.r+8){
+    levelClear(); return;
+  }
+  updateActionButtons();
+}
+
+// ---------- draw ----------
+function drawCone(t){
+  const col=t.suspicious>0?'rgba(255,70,90,0.30)':'rgba(255,214,80,0.22)';
+  ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(t.x,t.y);
+  ctx.arc(t.x,t.y,t.range,t.dir-t.cone/2,t.dir+t.cone/2); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle=t.suspicious>0?'rgba(255,70,90,0.5)':'rgba(255,214,80,0.35)'; ctx.stroke();
+}
+function drawPerson(x,y,r,color,dir,isBoss,hood){
+  ctx.save(); ctx.translate(x,y);
+  ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(0,r*0.75,r*0.95,r*0.35,0,0,Math.PI*2); ctx.fill();
+  // cloak body
+  ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(0,-r); ctx.lineTo(r*0.95,r*0.7); ctx.lineTo(-r*0.95,r*0.7); ctx.closePath(); ctx.fill();
+  // head / hood
+  ctx.fillStyle=hood?'#20243a':'#e8c39a'; ctx.beginPath(); ctx.arc(0,-r*0.35,r*0.55,0,Math.PI*2); ctx.fill();
+  if(hood){ ctx.fillStyle=color; ctx.beginPath(); ctx.arc(0,-r*0.45,r*0.62,Math.PI,0); ctx.fill(); }
+  if(isBoss){ ctx.fillStyle='#ffd166'; for(let i=-1;i<=1;i++){ ctx.beginPath(); ctx.moveTo(i*r*0.5,-r*0.95); ctx.lineTo(i*r*0.5-r*0.18,-r*0.45); ctx.lineTo(i*r*0.5+r*0.18,-r*0.45); ctx.closePath(); ctx.fill(); } }
+  // facing tick
+  ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(Math.cos(dir)*r*0.5,Math.sin(dir)*r*0.5); ctx.lineTo(Math.cos(dir)*(r+6),Math.sin(dir)*(r+6)); ctx.stroke();
+  ctx.restore();
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(bgCanvas) ctx.drawImage(bgCanvas,0,0);
+  if(screen==='menu'||screen==='howto'||screen==='levels'){ return; }
+  if(!player) return;
+  // exit
+  ctx.save(); ctx.translate(exitZone.x,exitZone.y);
+  ctx.fillStyle=exitZone.open?'rgba(60,255,150,0.25)':'rgba(120,120,120,0.18)';
+  ctx.beginPath(); ctx.arc(0,0,exitZone.r,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle=exitZone.open?'#3cff96':'#888'; ctx.lineWidth=3; ctx.stroke();
+  ctx.fillStyle=exitZone.open?'#3cff96':'#aaa'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(exitZone.open?'EXIT':'🔒',0,5); ctx.restore();
+  // walls
+  for(const w of walls){
+    if(w.kind==='crate'){ ctx.fillStyle='#6b4a2f'; ctx.fillRect(w.x,w.y,w.w,w.h); ctx.strokeStyle='#8a6238'; ctx.lineWidth=2; ctx.strokeRect(w.x+2,w.y+2,w.w-4,w.h-4);
+      ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.moveTo(w.x,w.y); ctx.lineTo(w.x+w.w,w.y+w.h); ctx.moveTo(w.x+w.w,w.y); ctx.lineTo(w.x,w.y+w.h); ctx.stroke(); }
+    else { ctx.fillStyle='rgba(46,160,90,0.55)'; for(let i=0;i<5;i++){ ctx.beginPath(); ctx.arc(w.x+10+i*11,w.y+14+(i%2)*18,13,0,Math.PI*2); ctx.fill(); } }
+  }
+  // smoke
+  for(const c of smokeClouds){ ctx.fillStyle='rgba(200,200,220,0.35)'; ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,Math.PI*2); ctx.fill(); }
+  // vision cones
+  guards.filter(x=>x.alive).forEach(drawCone); if(boss.alive) drawCone(boss);
+  // guards + boss
+  for(const gd of guards.filter(x=>x.alive)) drawPerson(gd.x,gd.y,gd.r,'#c94f5e',gd.dir,false,false);
+  if(boss.alive) drawPerson(boss.x,boss.y,boss.r,'#8e2f9e',boss.dir,true,false);
+  // player
+  const ch=CHARS[charIdx];
+  drawPerson(player.x,player.y,player.r,ch.color,player.dir,false,true);
+  if(player.hidden){ ctx.fillStyle='rgba(126,240,193,0.9)'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center'; ctx.fillText('HIDDEN',player.x,player.y-24); }
+  // move target marker
+  if(player.moving){ ctx.strokeStyle='rgba(126,240,193,0.8)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(player.tx,player.ty,8,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(player.tx-12,player.ty); ctx.lineTo(player.tx+12,player.ty); ctx.moveTo(player.tx,player.ty-12); ctx.lineTo(player.tx,player.ty+12); ctx.stroke(); }
+  // strike prompt ring
+  const st=strikeTarget();
+  if(st){ ctx.strokeStyle='#ffd166'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(st.x,st.y,st.r+9+Math.sin(performance.now()/150)*2,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='#ffd166'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.fillText('STRIKE!',st.x,st.y-st.r-14); }
+  // detection meter
+  if(detection>0.05){
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(FIELD.x+60,56,332,16);
+    ctx.fillStyle=detection>0.6?'#ff4757':'#ffd166'; ctx.fillRect(FIELD.x+62,58,328*clamp(detection,0,1),12);
+    ctx.fillStyle='#fff'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center'; ctx.fillText('⚠ SPOTTED — BREAK LINE OF SIGHT!',W/2,50);
+  }
+  // level banner (above the field, clear of the HUD pills and action bar)
+  ctx.fillStyle='#9aa3c7'; ctx.font='bold 12px sans-serif'; ctx.textAlign='left';
+  ctx.fillText('Contract '+level+' — '+LEVEL_NAMES[level-1]+(boss&&!boss.alive?'  •  Boss down — reach the exit':'  •  Take down the Boss'),FIELD.x+4,FIELD.y-8);
+  if(alarmFlash>0){ ctx.fillStyle='rgba(255,40,60,'+(alarmFlash*0.25)+')'; ctx.fillRect(0,0,W,H); }
+  if(screen==='paused'){ ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,W,H); }
+}
+function loop(ts){
+  const dt=Math.min(0.05,(ts-lastTs)/1000||0.016); lastTs=ts;
+  update(dt);
+}
+// Logic ticks on a timer (headless Chromium here fires rAF ~once per few
+// seconds, so a rAF-only loop stalls the game in headless tests), while
+// painting stays on rAF: real browsers get smooth 60fps, and headless stays
+// alive because it is not forced to software-paint continuously.
+setInterval(()=>loop(performance.now()), 33);
+function paint(){ draw(); requestAnimationFrame(paint); }
+requestAnimationFrame(paint);
+
+// ---------- input ----------
+function canvasPoint(e){
+  const r=canvas.getBoundingClientRect();
+  return { x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H };
+}
+canvas.addEventListener('pointerdown', e=>{
+  if(screen!=='playing') return;
+  ensureAudio();
+  const p=canvasPoint(e);
+  // tapping a strikeable guard strikes directly
+  const st=strikeTarget();
+  if(st && dist(p.x,p.y,st.x,st.y)<48){ doStrike(); return; }
+  setMoveTarget(p.x,p.y);
+});
+window.addEventListener('keydown', e=>{
+  const k=e.key.toLowerCase();
+  if(k==='p'||k==='escape'){ if(screen==='playing') setScreen('paused'); else if(screen==='paused') setScreen('playing'); return; }
+  if(k==='m'){ setMuted(!muted); return; }
+  if(screen!=='playing') return;
+  keys[k]=true;
+  if(k===' '){ e.preventDefault(); doStrike(); }
+  if(k==='s'&&!e.repeat) useSmoke();
+  if(k==='shift') useDash();
+});
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+
+// ---------- buttons ----------
+$('btn-start').onclick=()=>{ ensureAudio(); startMusic(); sfx('click'); startLevel(maxUnlocked>1?1:1); };
+$('btn-howto').onclick=()=>{ sfx('click'); setScreen('howto'); };
+$('btn-howto-back').onclick=()=>{ sfx('click'); setScreen('menu'); };
+$('btn-levels').onclick=()=>{ sfx('click'); setScreen('levels'); };
+$('btn-levels-back').onclick=()=>{ sfx('click'); setScreen('menu'); };
+$('btn-pause').onclick=()=>{ if(screen==='playing') setScreen('paused'); };
+$('btn-resume').onclick=()=>{ sfx('click'); setScreen('playing'); };
+$('btn-restart').onclick=()=>{ sfx('click'); startLevel(level); };
+$('btn-quit').onclick=()=>{ sfx('click'); setScreen('menu'); };
+$('btn-next').onclick=()=>{ sfx('click'); startLevel(Math.min(20,level+1)); };
+$('btn-clear-menu').onclick=()=>{ sfx('click'); setScreen('menu'); };
+$('btn-retry').onclick=()=>{ sfx('click'); startLevel(level); };
+$('btn-over-menu').onclick=()=>{ sfx('click'); setScreen('menu'); };
+$('btn-win-replay').onclick=()=>{ sfx('click'); startLevel(1); };
+$('btn-win-menu').onclick=()=>{ sfx('click'); setScreen('menu'); };
+$('btn-mute').onclick=()=>{ ensureAudio(); setMuted(!muted); };
+$('btn-strike').onclick=()=>doStrike();
+$('btn-smoke').onclick=()=>useSmoke();
+$('btn-dash').onclick=()=>useDash();
+
+// ---------- debug hook for headless testing ----------
+window.__shadowSneak=function(){
+  return {
+    screen, level, lives, score, detection:+(detection||0).toFixed(2),
+    muted, smokeLeft, dashReady: dashCd<=0,
+    player: player?{x:Math.round(player.x),y:Math.round(player.y),hidden:player.hidden}:null,
+    guards: guards.map(g=>({id:g.id,x:Math.round(g.x),y:Math.round(g.y),dir:+g.dir.toFixed(2),alive:g.alive,range:g.range})),
+    boss: boss?{x:Math.round(boss.x),y:Math.round(boss.y),dir:+boss.dir.toFixed(2),alive:boss.alive,range:boss.range}:null,
+    exit: exitZone?{x:exitZone.x,y:exitZone.y,open:exitZone.open}:null,
+    strikeTarget: (function(){ const t=strikeTarget(); return t?{id:t.id,x:Math.round(t.x),y:Math.round(t.y)}:null; })(),
+    walls: walls.map(w=>({x:w.x,y:w.y,w:w.w,h:w.h,kind:w.kind,solid:w.solid})),
+    maxUnlocked, levelName: LEVEL_NAMES[level-1]
+  };
+};
+
+refreshMenu();
+genLevel(1); // pre-render a level behind the menu
+setScreen('menu');
+loop(performance.now());
+// Deep link: ?level=N jumps straight into that contract (also used by the headless test to resume).
+try{
+  const q=new URLSearchParams(location.search).get('level');
+  const n=q?parseInt(q,10):0;
+  if(n>=1&&n<=20){ maxUnlocked=Math.max(maxUnlocked,n); refreshMenu(); startLevel(n); }
+}catch(e){}
+</script>
+</body>
+</html>
